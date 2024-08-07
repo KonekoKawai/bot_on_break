@@ -1,12 +1,9 @@
-# -*- coding: cp1251 -*-
-from email import message
-from gc import callbacks
-import config_reader
+п»їimport config_reader
 from config_reader import config
 
-import logging # библиотека для хранения логов #logging.error(msg!!!, exc_info=True)
-import asyncio # библиотека для асинхронного программирования
-import aiogram #import aiogram # Каркас для API Telegram Bot 
+import logging # Р±РёР±Р»РёРѕС‚РµРєР° РґР»СЏ С…СЂР°РЅРµРЅРёСЏ Р»РѕРіРѕРІ #logging.error(msg!!!, exc_info=True)
+import asyncio # Р±РёР±Р»РёРѕС‚РµРєР° РґР»СЏ Р°СЃРёРЅС…СЂРѕРЅРЅРѕРіРѕ РїСЂРѕРіСЂР°РјРјРёСЂРѕРІР°РЅРёСЏ
+import aiogram #import aiogram # РљР°СЂРєР°СЃ РґР»СЏ API Telegram Bot 
 from aiogram import F, Router
 from aiogram.filters.command import Command
 from aiogram.filters import Command, StateFilter
@@ -14,135 +11,150 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+from aiogram.enums import ParseMode
 
+logging.basicConfig(level=logging.INFO) ########   РќР°СЃС‚СЂРѕР№РєР° Р»РѕРіРµСЂР°   #####
+bot = aiogram.Bot(token=config.bot_token.get_secret_value()) # РћР±СЉРµРєС‚ Р±РѕС‚Р°
+disp = aiogram.Dispatcher() # Р”РёСЃРїРµС‚С‡РµСЂ
 
-logging.basicConfig(level=logging.INFO) ########   Настройка логера   #####
-bot = aiogram.Bot(token=config.bot_token.get_secret_value()) # Объект бота
-disp = aiogram.Dispatcher() # Диспетчер
-flag_empty_drivers = [[True]]*config_reader.queue_drivers # Доступна для очередь cписок из *config_reader.queue_drivers
-current_cout_query = [[]]*config_reader.queue_drivers # Количество человек в каждоый очереди
+flag_empty_drivers = [[True]]*config_reader.queue_drivers # Р”РѕСЃС‚СѓРїРЅР° РґР»СЏ РѕС‡РµСЂРµРґСЊ cРїРёСЃРѕРє РёР· *config_reader.queue_drivers
+
+current_cout_query = [] ## РљРѕР»РёС‡РµСЃС‚РІРѕ С‡РµР»РѕРІРµРє РІ РєР°Р¶РґРѕС‹Р№ РѕС‡РµСЂРµРґРё РљРѕР»РёС‡РµСЃС‚РІРѕ РѕС‡РµСЂРµРґРµР№ config_reader.queue_drivers
+for i in range(config_reader.queue_drivers):
+    current_cout_query.append([] * config_reader.queue_drivers)
 #------------------------------------------------------------------------------------------------------------------------
 
-class breakFastState(StatesGroup): # Класс состояний 
-    waiting_to_queue = State() #1 ОЖИДАНИЕ ВХОЖДЕНИЯ В ОЧЕРЕДЬ
-    waiting_to_free_queue = State() #2 ЗАНЯЛ ОЧЕРЕДЬ И ЖДЁТ ОСВОБОЖДЕНИЯ ОЧЕРЕДИ
-    waiting_to_solution = State() #3 РЕШЕНИЕ ПО ПОВОДУ ОЧЕРЕДИ 
-    breakfast = State() #4 ПЕРЕРЫВ
+class breakFastState(StatesGroup): # РљР»Р°СЃСЃ СЃРѕСЃС‚РѕСЏРЅРёР№ 
+    waiting_to_queue = State() #1 РћР–РР”РђРќРР• Р’РҐРћР–Р”Р•РќРРЇ Р’ РћР§Р•Р Р•Р”Р¬
+    waiting_to_free_queue = State() #2 Р—РђРќРЇР› РћР§Р•Р Р•Р”Р¬ Р Р–Р”РЃРў РћРЎР’РћР‘РћР–Р”Р•РќРРЇ РћР§Р•Р Р•Р”Р
+    waiting_to_solution = State() #3 Р Р•РЁР•РќРР• РџРћ РџРћР’РћР”РЈ РћР§Р•Р Р•Р”Р 
+    breakfast = State() #4 РџР•Р Р•Р Р«Р’
     
 
-async def set_query(id): # функция занятия очереди 
-    print(current_cout_query[0].__len__)
-    current_cout_query.append(id)
-    for i in current_cout_query:
-            print(i)
-    
+async def set_query(user_id): # С„СѓРЅРєС†РёСЏ Р·Р°РЅСЏС‚РёСЏ РѕС‡РµСЂРµРґРё 
+    global current_cout_query
+    #current_cout_query.sort(key=lambda arr: len(arr)) # РЎР°РјР°СЏ РїРµСЂРІР°СЏ РѕС‡РµСЂРµРґСЊ, СЃР°РјР°СЏ РєРѕСЂРѕС‚РєР°СЏ 
+    current_cout_query[0].append(user_id)
+    current_cout_query.sort(key=lambda arr: len(arr)) # РЎР°РјР°СЏ РїРµСЂРІР°СЏ РѕС‡РµСЂРµРґСЊ, СЃР°РјР°СЏ РєРѕСЂРѕС‚РєР°СЏ 
+   
 
-async def check_query(): # проверка доступности очереди 
-    for flag in flag_empty_drivers:
-        if(flag == True):
-            return flag
+async def check_query(user_id): # РїСЂРѕРІРµСЂРєР° РґРѕСЃС‚СѓРїРЅРѕСЃС‚Рё РѕС‡РµСЂРµРґРё 
+    global current_cout_query
+    for i in range(config_reader.queue_drivers):
+        if not config_reader[0]:
+            if user_id in current_cout_query[i][0]:
+                return True
+    return False
         
 
-async def check_place_query(): # Проверка места в очереди 
+async def check_place_query(): # РџСЂРѕРІРµСЂРєР° РјРµСЃС‚Р° РІ РѕС‡РµСЂРµРґРё x
     return 0;
+
+
+async def delet_in_query(user_id): # РЈРґР°Р»РµРЅРёРµ РёР· РѕС‡РµСЂРµРґРё
+    global current_cout_query
+    
         
 
-@disp.message(Command("reboot")) #Перезапуск бота
+@disp.message(Command("reboot")) #РџРµСЂРµР·Р°РїСѓСЃРє Р±РѕС‚Р°
 async def cmd_reboot(message: Message, state: FSMContext):
-    await state.set_state(None) # ОТЧИЩАЕМ состояния
-    await message.answer( "Бот перезапущен")
+    await state.set_state(None) # РћРўР§РР©РђР•Рњ СЃРѕСЃС‚РѕСЏРЅРёСЏ
+    await message.answer( "<b>Р‘РѕС‚ РїРµСЂРµР·Р°РїСѓС‰РµРЅ</b>", parse_mode=ParseMode.HTML)
 
 
-@disp.message(StateFilter(None), Command("start")) #1 Первый запуск бота Запускает либо #2 либо #3
+@disp.message(StateFilter(None), Command("start")) #1 РџРµСЂРІС‹Р№ Р·Р°РїСѓСЃРє Р±РѕС‚Р° Р—Р°РїСѓСЃРєР°РµС‚ Р»РёР±Рѕ #2 Р»РёР±Рѕ #3
 async def cmd_start(message: Message, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
-        text="Занять очередь",
+        text="Р—Р°РЅСЏС‚СЊ РѕС‡РµСЂРµРґСЊ",
         callback_data="waiting_to_free_queue")
     )
-    await state.set_state(breakFastState.waiting_to_queue) #1 ОЖИДАНИЕ ВХОЖДЕНИЯ В ОЧЕРЕДЬ
+    await state.set_state(breakFastState.waiting_to_queue) #1 РћР–РР”РђРќРР• Р’РҐРћР–Р”Р•РќРРЇ Р’ РћР§Р•Р Р•Р”Р¬
     await message.answer(
-        "Этот бот поможет тебе занять очередь на перерыв, чтобы занять очередь, нажми на кнопку",
+        "Р­С‚РѕС‚ Р±РѕС‚ РїРѕРјРѕР¶РµС‚ С‚РµР±Рµ Р·Р°РЅСЏС‚СЊ РѕС‡РµСЂРµРґСЊ РЅР° РїРµСЂРµСЂС‹РІ, С‡С‚РѕР±С‹ Р·Р°РЅСЏС‚СЊ РѕС‡РµСЂРµРґСЊ, РЅР°Р¶РјРё РЅР° РєРЅРѕРїРєСѓ",
         reply_markup=builder.as_markup()
     )
-
     
-@disp.callback_query(F.data == "waiting_to_queue") #1 Эмитация первого запуска Запускает либо #2 либо #3
+    
+@disp.callback_query(F.data == "waiting_to_queue") #1 Р­РјРёС‚Р°С†РёСЏ РїРµСЂРІРѕРіРѕ Р·Р°РїСѓСЃРєР° Р—Р°РїСѓСЃРєР°РµС‚ Р»РёР±Рѕ #2 Р»РёР±Рѕ #3
 async def new_start(callback: CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
-        text="Занять очередь",
+        text="Р—Р°РЅСЏС‚СЊ РѕС‡РµСЂРµРґСЊ",
         callback_data="waiting_to_free_queue")
     )
-    await state.set_state(breakFastState.waiting_to_queue) # ОЖИДАНИЕ ОЧЕРЕДИ
+    await state.set_state(breakFastState.waiting_to_queue) #1 РћР–РР”РђРќРР• Р’РҐРћР–Р”Р•РќРРЇ Р’ РћР§Р•Р Р•Р”Р¬
     await callback.message.answer(
-        "Чтобы повторно занять очередь, нажми на кнопку",
+        "Р§С‚РѕР±С‹ РїРѕРІС‚РѕСЂРЅРѕ Р·Р°РЅСЏС‚СЊ РѕС‡РµСЂРµРґСЊ, РЅР°Р¶РјРё РЅР° РєРЅРѕРїРєСѓ",
         reply_markup=builder.as_markup()
     )
-    await callback.answer() # Подтвердить получение от телеграмма
+    await callback.answer() # РџРѕРґС‚РІРµСЂРґРёС‚СЊ РїРѕР»СѓС‡РµРЅРёРµ РѕС‚ С‚РµР»РµРіСЂР°РјРјР°
+   
 
-
-@disp.callback_query(breakFastState.waiting_to_queue, F.data == "waiting_to_free_queue") #2 Обработчки ЗАНЯЛ ОЧЕРЕДЬ После шага с ожиданием очереди
+@disp.callback_query(breakFastState.waiting_to_queue, F.data == "waiting_to_free_queue") #2 РћР±СЂР°Р±РѕС‚С‡РєРё Р—РђРќРЇР› РћР§Р•Р Р•Р”Р¬ РџРѕСЃР»Рµ С€Р°РіР° СЃ РѕР¶РёРґР°РЅРёРµРј РѕС‡РµСЂРµРґРё
 async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
-        text="Проверить место в очереди",
+        text="РџСЂРѕРІРµСЂРёС‚СЊ РјРµСЃС‚Рѕ РІ РѕС‡РµСЂРµРґРё",
         callback_data="check_place_query")
     )
+
     builder.add(InlineKeyboardButton(
-        text="Выйти из очереди",
-        callback_data="waiting_to_queue",
+        text="Р’С‹Р№С‚Рё РёР· РѕС‡РµСЂРµРґРё",
+        callback_data="waiting_to_queue"
         )
     )
-    #await set_query(message.from_user.id) # запуск функции занятия очереди
-    await state.set_state(breakFastState.waiting_to_free_queue) #2 ЗАНЯЛ ОЧЕРЕДЬ И ЖДЁТ ОСВОБОЖДЕНИЯ ОЧЕРЕДИ
-    await callback.message.answer("Какой-то текст", 
+    builder.adjust(1)
+    await set_query(callback.message.from_user.id) # С‡РµР»РѕРІРµРє СЃ id Р·Р°РЅРёРјР°РµС‚ РѕС‡РµСЂРµРґСЊ 
+    await state.set_state(breakFastState.waiting_to_free_queue) #2 Р—РђРќРЇР› РћР§Р•Р Р•Р”Р¬ Р Р–Р”РЃРў РћРЎР’РћР‘РћР–Р”Р•РќРРЇ РћР§Р•Р Р•Р”Р
+    if(check_query(callback.message.from_user.id)):
+        await callback.answer() # РџРѕРґС‚РІРµСЂРґРёС‚СЊ РїРѕР»СѓС‡РµРЅРёРµ РѕС‚ С‚РµР»РµРіСЂР°РјРјР°
+    else:
+        await callback.message.answer("в¬‡пёЏ Р’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ в¬‡пёЏ", 
                                   reply_markup=builder.as_markup()
                                   )
-    await callback.answer() # Подтвердить получение от телеграмма
+        await callback.answer() # РџРѕРґС‚РІРµСЂРґРёС‚СЊ РїРѕР»СѓС‡РµРЅРёРµ РѕС‚ С‚РµР»РµРіСЂР°РјРјР°
     
 
 
-@disp.callback_query(breakFastState.waiting_to_free_queue, F.data == "waiting_to_queue") #3 Обработчки ОЧЕРЕДЬ СВОБОДНА # РЕШЕНИЕ ПО ПОВОДУ ОЧЕРЕДИ 
+@disp.callback_query(breakFastState.waiting_to_free_queue, F.data == "waiting_to_free_queue") #3 РћР±СЂР°Р±РѕС‚С‡РєРё РћР§Р•Р Р•Р”Р¬ РЎР’РћР‘РћР”РќРђ # Р Р•РЁР•РќРР• РџРћ РџРћР’РћР”РЈ РћР§Р•Р Р•Р”Р 
 async def waiting_to_solution(callback: CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
-        text="Выйти на перерыв",
+        text="Р’С‹Р№С‚Рё РЅР° РїРµСЂРµСЂС‹РІ",
         callback_data="breakfast")
     )
     builder.add(InlineKeyboardButton(
-        text="Выйти из очереди",
+        text="Р’С‹Р№С‚Рё РёР· РѕС‡РµСЂРµРґРё",
         callback_data="waiting_to_queue")
     )
-    await check_query() # Вызов функции
-    await state.set_state(breakFastState.waiting_to_solution)
+    #await check_query() # Р’С‹Р·РѕРІ С„СѓРЅРєС†РёРё
+    await state.set_state(breakFastState.waiting_to_solution) #3 Р Р•РЁР•РќРР• РџРћ РџРћР’РћР”РЈ РћР§Р•Р Р•Р”Р 
+    await callback.message.answer("в¬‡пёЏ Р’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ в¬‡пёЏ", 
+                                  reply_markup=builder.as_markup()
+                                  )
+    await callback.answer() # РџРѕРґС‚РІРµСЂРґРёС‚СЊ РїРѕР»СѓС‡РµРЅРёРµ РѕС‚ С‚РµР»РµРіСЂР°РјРјР°
     
 
-@disp.callback_query(breakFastState.waiting_to_free_queue, F.data == "waiting_to_queue") #4 Перерыв
+@disp.callback_query(breakFastState.waiting_to_solution, F.data == "breakfast") #4 РџРµСЂРµСЂС‹РІ
 async def breakfast(callback: CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
-        text="Вернуться с перерыва",
+        text="Р’РµСЂРЅСѓС‚СЊСЃСЏ СЃ РїРµСЂРµСЂС‹РІР°",
         callback_data="waiting_to_queue")
     )
-    await state.set_state(breakFastState.breakfast)
+    await state.set_state(breakFastState.breakfast) #4 РџР•Р Р•Р Р«Р’
+    await callback.message.answer("РљР°РєРѕР№-С‚Рѕ С‚РµРєСЃС‚", 
+                                  reply_markup=builder.as_markup()
+                                  )
+    await callback.answer() # РџРѕРґС‚РІРµСЂРґРёС‚СЊ РїРѕР»СѓС‡РµРЅРёРµ РѕС‚ С‚РµР»РµРіСЂР°РјРјР°
 
-# @disp.callback_query(F.data == "waiting_to_free_queue") # Проверка очереди
-# async def send_waiting_queusy(callback: CallbackQuery):
-#     await set_query(callback.message.from_user.id);
-#     if (check_query):
-#         await callback.message.answer(str(f"Вы вышли на перерыв! Ваш id: {callback.message.from_user.id}"))     
-#     else:
-#         task_check_place_query = asyncio.create_task(check_place_query())
-#         await callback.message.answer(str(f"Ваше место в очереди: {await task_check_place_query}"))
-
-        
      
 #--------------------------------------------------------------------
 
 
 
-# Запуск процесса поллинга  новых апдейтов (поиск обновлений от новых задач) // Polling, или опрос, – это процесс, при котором клиентский скрипт периодически отправляет запросы к серверу для проверки наличия новой инфы. 
+# Р—Р°РїСѓСЃРє РїСЂРѕС†РµСЃСЃР° РїРѕР»Р»РёРЅРіР°  РЅРѕРІС‹С… Р°РїРґРµР№С‚РѕРІ (РїРѕРёСЃРє РѕР±РЅРѕРІР»РµРЅРёР№ РѕС‚ РЅРѕРІС‹С… Р·Р°РґР°С‡) // Polling, РёР»Рё РѕРїСЂРѕСЃ, вЂ“ СЌС‚Рѕ РїСЂРѕС†РµСЃСЃ, РїСЂРё РєРѕС‚РѕСЂРѕРј РєР»РёРµРЅС‚СЃРєРёР№ СЃРєСЂРёРїС‚ РїРµСЂРёРѕРґРёС‡РµСЃРєРё РѕС‚РїСЂР°РІР»СЏРµС‚ Р·Р°РїСЂРѕСЃС‹ Рє СЃРµСЂРІРµСЂСѓ РґР»СЏ РїСЂРѕРІРµСЂРєРё РЅР°Р»РёС‡РёСЏ РЅРѕРІРѕР№ РёРЅС„С‹. 
 async def main():
     await disp.start_polling(bot)
 
@@ -153,13 +165,13 @@ if __name__ == "__main__":
 
 
 
-########   Настройка логера   #####
-# logger = logging.getLogger(__name__); # Имя файла в логгере
-# logger.setLevel(logging.INFO); # LVL для обработки в логгере (Уровень логирования)
+########   РќР°СЃС‚СЂРѕР№РєР° Р»РѕРіРµСЂР°   #####
+# logger = logging.getLogger(__name__); # РРјСЏ С„Р°Р№Р»Р° РІ Р»РѕРіРіРµСЂРµ
+# logger.setLevel(logging.INFO); # LVL РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё РІ Р»РѕРіРіРµСЂРµ (РЈСЂРѕРІРµРЅСЊ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ)
 
-# loggerHandler = logging.FileHandler(f'{__name__}.log'); # настройка обработчика для logger
-# loggerFormat = logging.Formatter("%(filename)s | %(asctime)s | %(levelname)s | %(message)s"); # настройка форматировщика
+# loggerHandler = logging.FileHandler(f'{__name__}.log'); # РЅР°СЃС‚СЂРѕР№РєР° РѕР±СЂР°Р±РѕС‚С‡РёРєР° РґР»СЏ logger
+# loggerFormat = logging.Formatter("%(filename)s | %(asctime)s | %(levelname)s | %(message)s"); # РЅР°СЃС‚СЂРѕР№РєР° С„РѕСЂРјР°С‚РёСЂРѕРІС‰РёРєР°
 
-# loggerHandler.setFormatter(loggerFormat); # добавление форматировщика к обработчику
-# logger.addHandler(loggerHandler); # добавление обработчика к логгеру
-###################################ы
+# loggerHandler.setFormatter(loggerFormat); # РґРѕР±Р°РІР»РµРЅРёРµ С„РѕСЂРјР°С‚РёСЂРѕРІС‰РёРєР° Рє РѕР±СЂР°Р±РѕС‚С‡РёРєСѓ
+# logger.addHandler(loggerHandler); # РґРѕР±Р°РІР»РµРЅРёРµ РѕР±СЂР°Р±РѕС‚С‡РёРєР° Рє Р»РѕРіРіРµСЂСѓ
+###################################С‹
