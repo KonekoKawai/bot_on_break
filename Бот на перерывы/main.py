@@ -33,7 +33,6 @@ class breakFastState(StatesGroup): # Класс состояний
 
 async def set_query(user_id): # функция занятия очереди 
     global current_cout_query
-    #current_cout_query.sort(key=lambda arr: len(arr)) # Самая первая очередь, самая короткая 
     current_cout_query[0].append(user_id)
     current_cout_query.sort(key=lambda arr: len(arr)) # Самая первая очередь, самая короткая 
    
@@ -47,15 +46,10 @@ async def check_query(user_id): # проверка доступности оче
     return False
         
 
-async def check_place_query(): # Проверка места в очереди x
-    return 0;
-
-
 async def delet_in_query(user_id): # Удаление из очереди
     global current_cout_query
     
         
-
 @disp.message(Command("reboot")) #Перезапуск бота
 async def cmd_reboot(message: Message, state: FSMContext):
     await state.set_state(None) # ОТЧИЩАЕМ состояния
@@ -108,6 +102,7 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
     await set_query(callback.message.from_user.id) # человек с id занимает очередь 
     await state.set_state(breakFastState.waiting_to_free_queue) #2 ЗАНЯЛ ОЧЕРЕДЬ И ЖДЁТ ОСВОБОЖДЕНИЯ ОЧЕРЕДИ
     if(check_query(callback.message.from_user.id)):
+        await waiting_to_solution(callback.message.reply_to_message)
         await callback.answer() # Подтвердить получение от телеграмма
     else:
         await callback.message.answer("⬇️ Выберите действие ⬇️", 
@@ -116,8 +111,7 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
         await callback.answer() # Подтвердить получение от телеграмма
     
 
-
-@disp.callback_query(breakFastState.waiting_to_free_queue, F.data == "waiting_to_free_queue") #3 Обработчки ОЧЕРЕДЬ СВОБОДНА # РЕШЕНИЕ ПО ПОВОДУ ОЧЕРЕДИ 
+@disp.callback_query(breakFastState.waiting_to_free_queue) #3 Обработчки ОЧЕРЕДЬ СВОБОДНА # РЕШЕНИЕ ПО ПОВОДУ ОЧЕРЕДИ 
 async def waiting_to_solution(callback: CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
@@ -128,9 +122,10 @@ async def waiting_to_solution(callback: CallbackQuery, state: FSMContext):
         text="Выйти из очереди",
         callback_data="waiting_to_queue")
     )
+    builder.adjust(1)
     #await check_query() # Вызов функции
     await state.set_state(breakFastState.waiting_to_solution) #3 РЕШЕНИЕ ПО ПОВОДУ ОЧЕРЕДИ 
-    await callback.message.answer("⬇️ Выберите действие ⬇️", 
+    await callback.message.answer("⬇️ Очередь подошла, выбери действие ⬇️", 
                                   reply_markup=builder.as_markup()
                                   )
     await callback.answer() # Подтвердить получение от телеграмма
@@ -144,7 +139,7 @@ async def breakfast(callback: CallbackQuery, state: FSMContext):
         callback_data="waiting_to_queue")
     )
     await state.set_state(breakFastState.breakfast) #4 ПЕРЕРЫВ
-    await callback.message.answer("Какой-то текст", 
+    await callback.message.answer("⬇️ Вы на перерыве, чтобы вернуться нажмите на кнопку ⬇️", 
                                   reply_markup=builder.as_markup()
                                   )
     await callback.answer() # Подтвердить получение от телеграмма
