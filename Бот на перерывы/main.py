@@ -1,22 +1,41 @@
 # -*- coding: cp1251 -*-
+from email import message
+from gc import callbacks
 import config_reader
 from config_reader import config
 
 import logging # библиотека для хранения логов #logging.error(msg!!!, exc_info=True)
 import asyncio # библиотека для асинхронного программирования
 import aiogram #import aiogram # Каркас для API Telegram Bot 
+from aiogram import F, Router
 from aiogram.filters.command import Command
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
+
 
 logging.basicConfig(level=logging.INFO) ########   Настройка логера   #####
 bot = aiogram.Bot(token=config.bot_token.get_secret_value()) # Объект бота
 disp = aiogram.Dispatcher() # Диспетчер
-flag_empty_drivers = [True]*config_reader.queue_drivers # Доступна для очередь cписок из *config_reader.queue_drivers
-current_cout_query = [0]*config_reader.queue_drivers # Количество человек в каждоый очереди
+flag_empty_drivers = [[True]]*config_reader.queue_drivers # Доступна для очередь cписок из *config_reader.queue_drivers
+current_cout_query = [[]]*config_reader.queue_drivers # Количество человек в каждоый очереди
 #------------------------------------------------------------------------------------------------------------------------
+
+class breakFastState(StatesGroup): # Класс состояний 
+    waiting_to_queue = State() #1 ОЖИДАНИЕ ВХОЖДЕНИЯ В ОЧЕРЕДЬ
+    waiting_to_free_queue = State() #2 ЗАНЯЛ ОЧЕРЕДЬ И ЖДЁТ ОСВОБОЖДЕНИЯ ОЧЕРЕДИ
+    waiting_to_solution = State() #3 РЕШЕНИЕ ПО ПОВОДУ ОЧЕРЕДИ 
+    breakfast = State() #4 ПЕРЕРЫВ
+    
+
+async def set_query(id): # функция занятия очереди 
+    print(current_cout_query[0].__len__)
+    current_cout_query.append(id)
+    for i in current_cout_query:
+            print(i)
+    
 
 async def check_query(): # проверка доступности очереди 
     for flag in flag_empty_drivers:
@@ -28,25 +47,94 @@ async def check_place_query(): # Проверка места в очереди
     return 0;
         
 
-@disp.message(Command("start")) # Запуск бота 
-async def cmd_random(message: aiogram.types.Message):
+@disp.message(Command("reboot")) #Перезапуск бота
+async def cmd_reboot(message: Message, state: FSMContext):
+    await state.set_state(None) # ОТЧИЩАЕМ состояния
+    await message.answer( "Бот перезапущен")
+
+
+@disp.message(StateFilter(None), Command("start")) #1 Первый запуск бота Запускает либо #2 либо #3
+async def cmd_start(message: Message, state: FSMContext):
     builder = InlineKeyboardBuilder()
-    builder.add(aiogram.types.InlineKeyboardButton(
+    builder.add(InlineKeyboardButton(
         text="Занять очередь",
-        callback_data="take_queue")
+        callback_data="waiting_to_free_queue")
     )
+    await state.set_state(breakFastState.waiting_to_queue) #1 ОЖИДАНИЕ ВХОЖДЕНИЯ В ОЧЕРЕДЬ
     await message.answer(
-        "Этот бот поможет тебе занять очередь на перерыв, чтобы занять очередь, нажми кнопку внизу",
+        "Этот бот поможет тебе занять очередь на перерыв, чтобы занять очередь, нажми на кнопку",
         reply_markup=builder.as_markup()
     )
+
     
-@disp.callback_query(aiogram.F.data == "take_queue") # Проверка очереди
-async def send_waiting_queusy(callback: aiogram.types.CallbackQuery):
-    if (not check_query):
-        await callback.message.answer(str("Вы вышли на перерыв "))
-    else:
-        task_check_place_query = asyncio.create_task(check_place_query())
-        await callback.message.answer(str(f"Ваше место в очереди: {await task_check_place_query}"))
+@disp.callback_query(F.data == "waiting_to_queue") #1 Эмитация первого запуска Запускает либо #2 либо #3
+async def new_start(callback: CallbackQuery, state: FSMContext):
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text="Занять очередь",
+        callback_data="waiting_to_free_queue")
+    )
+    await state.set_state(breakFastState.waiting_to_queue) # ОЖИДАНИЕ ОЧЕРЕДИ
+    await callback.message.answer(
+        "Чтобы повторно занять очередь, нажми на кнопку",
+        reply_markup=builder.as_markup()
+    )
+    await callback.answer() # Подтвердить получение от телеграмма
+
+
+@disp.callback_query(breakFastState.waiting_to_queue, F.data == "waiting_to_free_queue") #2 Обработчки ЗАНЯЛ ОЧЕРЕДЬ После шага с ожиданием очереди
+async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text="Проверить место в очереди",
+        callback_data="check_place_query")
+    )
+    builder.add(InlineKeyboardButton(
+        text="Выйти из очереди",
+        callback_data="waiting_to_queue",
+        )
+    )
+    #await set_query(message.from_user.id) # запуск функции занятия очереди
+    await state.set_state(breakFastState.waiting_to_free_queue) #2 ЗАНЯЛ ОЧЕРЕДЬ И ЖДЁТ ОСВОБОЖДЕНИЯ ОЧЕРЕДИ
+    await callback.message.answer("Какой-то текст", 
+                                  reply_markup=builder.as_markup()
+                                  )
+    await callback.answer() # Подтвердить получение от телеграмма
+    
+
+
+@disp.callback_query(breakFastState.waiting_to_free_queue, F.data == "waiting_to_queue") #3 Обработчки ОЧЕРЕДЬ СВОБОДНА # РЕШЕНИЕ ПО ПОВОДУ ОЧЕРЕДИ 
+async def waiting_to_solution(callback: CallbackQuery, state: FSMContext):
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text="Выйти на перерыв",
+        callback_data="breakfast")
+    )
+    builder.add(InlineKeyboardButton(
+        text="Выйти из очереди",
+        callback_data="waiting_to_queue")
+    )
+    await check_query() # Вызов функции
+    await state.set_state(breakFastState.waiting_to_solution)
+    
+
+@disp.callback_query(breakFastState.waiting_to_free_queue, F.data == "waiting_to_queue") #4 Перерыв
+async def breakfast(callback: CallbackQuery, state: FSMContext):
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text="Вернуться с перерыва",
+        callback_data="waiting_to_queue")
+    )
+    await state.set_state(breakFastState.breakfast)
+
+# @disp.callback_query(F.data == "waiting_to_free_queue") # Проверка очереди
+# async def send_waiting_queusy(callback: CallbackQuery):
+#     await set_query(callback.message.from_user.id);
+#     if (check_query):
+#         await callback.message.answer(str(f"Вы вышли на перерыв! Ваш id: {callback.message.from_user.id}"))     
+#     else:
+#         task_check_place_query = asyncio.create_task(check_place_query())
+#         await callback.message.answer(str(f"Ваше место в очереди: {await task_check_place_query}"))
 
         
      
@@ -54,13 +142,14 @@ async def send_waiting_queusy(callback: aiogram.types.CallbackQuery):
 
 
 
-# Запуск процесса поллинга новых апдейтов
+# Запуск процесса поллинга  новых апдейтов (поиск обновлений от новых задач) // Polling, или опрос, – это процесс, при котором клиентский скрипт периодически отправляет запросы к серверу для проверки наличия новой инфы. 
 async def main():
     await disp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
     
+
 
 
 
@@ -73,4 +162,4 @@ if __name__ == "__main__":
 
 # loggerHandler.setFormatter(loggerFormat); # добавление форматировщика к обработчику
 # logger.addHandler(loggerHandler); # добавление обработчика к логгеру
-###################################
+###################################ы
