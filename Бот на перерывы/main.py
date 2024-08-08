@@ -1,4 +1,6 @@
-﻿import config_reader
+﻿from email import message
+import enum
+import config_reader
 from config_reader import config
 
 import logging # библиотека для хранения логов #logging.error(msg!!!, exc_info=True)
@@ -18,6 +20,10 @@ logging.basicConfig(level=logging.INFO) ########   Настройка логер
 bot = aiogram.Bot(token=config.bot_token.get_secret_value()) # Объект бота
 disp = aiogram.Dispatcher() # Диспетчер
 
+dic_break_more_XX_minet = {} # Словарь для определения задержки на перерыве больше 15 минут  # Время на принятие решения --------------------------------------------
+dic_time_solution = {} # Время на принятие решения --------------------------------------------
+
+remove_this_message = []
 flag_empty_drivers = [[True]]*config_reader.queue_drivers # Доступна для очередь cписок из *config_reader.queue_drivers
 
 current_cout_query = [] ## Количество человек в каждоый очереди Количество очередей config_reader.queue_drivers
@@ -25,12 +31,16 @@ for i in range(config_reader.queue_drivers):
     current_cout_query.append([] * config_reader.queue_drivers)
 #------------------------------------------------------------------------------------------------------------------------
 
+class time(enum.Enum):
+    break_time = 900 # Время перерыва
+    solution_time = 3 # Время на принятия решения по поводу перерыва
+
 class breakFastState(StatesGroup): # Класс состояний 
     waiting_to_queue = State() #1 ОЖИДАНИЕ ВХОЖДЕНИЯ В ОЧЕРЕДЬ
     waiting_to_free_queue = State() #2 ЗАНЯЛ ОЧЕРЕДЬ И ЖДЁТ ОСВОБОЖДЕНИЯ ОЧЕРЕДИ
     waiting_to_solution = State() #3 РЕШЕНИЕ ПО ПОВОДУ ОЧЕРЕДИ 
     breakfast = State() #4 ПЕРЕРЫВ
-    
+   
 
 async def set_query(user_id): # функция занятия очереди 
     global current_cout_query
@@ -60,8 +70,9 @@ async def check_query_1(user_id) -> bool: # проверка доступнос�
 
 async def delet_in_query(user_id): # Удаление из очереди
     global current_cout_query
-    # for x in current_cout_query:
-    #     print(f"Выведем значения очереди: {x}")
+    
+    for x in current_cout_query:
+        print(f"Выведем значения очереди: {x}")
         
     for i in range(config_reader.queue_drivers): # Пройдемся по всем очередям 
         if current_cout_query[i]: # Если список не пуст
@@ -73,18 +84,19 @@ async def delet_in_query(user_id): # Удаление из очереди
                         current_cout_query[0].append(current_cout_query[len(current_cout_query)-1].pop()) # Берём самую длинную очередь и переносим из неё id в самую короткую                 
                 break
 
-    current_cout_query.sort(key=lambda arr: len(arr)) # Самая первая очередь, самая короткая        
-    # for x in current_cout_query:
-    #     print(f"Очередь после удаления: {x}")
+    current_cout_query.sort(key=lambda arr: len(arr)) # Самая первая очередь, самая короткая      
     
-        
+    for x in current_cout_query:
+        print(f"Очередь после удаления: {x}")
+
+
 @disp.message(Command("reboot")) #Перезапуск бота
 async def cmd_reboot(message: Message, state: FSMContext):
     await message.delete()
     await state.set_state(None) # ОТЧИЩАЕМ состояния
     await message.answer( "<b>Бот перезапущен</b>", parse_mode=ParseMode.HTML)
 
-@disp.message(StateFilter(None), Command("start")) #1 Первый запуск бота Запускает либо #2 либо #3
+@disp.message(Command("start")) #1 Первый запуск бота Запускает либо #2 либо #3
 async def cmd_start(message: Message, state: FSMContext):
     await message.delete()
     builder = InlineKeyboardBuilder()
@@ -95,15 +107,17 @@ async def cmd_start(message: Message, state: FSMContext):
     await delet_in_query(message.from_user.id) # Удаление челововека из очереди
     await state.set_state(breakFastState.waiting_to_queue) #1 ОЖИДАНИЕ ВХОЖДЕНИЯ В ОЧЕРЕДЬ
     await message.answer(
-        "Этот бот поможет тебе занять очередь на перерыв. Нажми на кнопку, чтобы занять очередь ",
+        "Нажми на кнопку, чтобы занять очередь ",
         reply_markup=builder.as_markup()
     )
     
     
-    
 @disp.callback_query(F.data == "waiting_to_queue") #1 Эмитация первого запуска Запускает либо #2 либо #3
 async def new_start(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
+    global dic_break_more_XX_minet # Время на принятие решения --------------------------------------------
+    dic_break_more_XX_minet[callback.from_user.id] = False # Время на принятие решения --------------------------------------------
+    
+    await callback.message.delete() # Удаления предыдущих инлайнов
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
         text="Занять очередь",
@@ -120,7 +134,10 @@ async def new_start(callback: CallbackQuery, state: FSMContext):
 
 @disp.callback_query(breakFastState.waiting_to_queue, F.data == "waiting_to_free_queue") #2 Обработчки ЗАНЯЛ ОЧЕРЕДЬ После шага с ожиданием очереди
 async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
+    global dic_time_solution # Время на принятие решения --------------------------------------------
+    dic_time_solution[callback.from_user.id] = True # Время на принятие решения --------------------------------------------
+    
+    await callback.message.delete() # Удаления предыдущих инлайнов
     await set_query(callback.from_user.id) # человек с id занимает очередь 
     await state.set_state(breakFastState.waiting_to_free_queue) #2 ЗАНЯЛ ОЧЕРЕДЬ И ЖДЁТ ОСВОБОЖДЕНИЯ ОЧЕРЕДИ
     if(check_query(callback.from_user.id)): # Если очередь подошла
@@ -129,20 +146,42 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
             text="Уйти на перерыв",
             callback_data="breakfast"),
         )
-        builder.add(InlineKeyboardButton(
-            text="Выйти из очереди",
-            callback_data="waiting_to_queue")
-        )
-        builder.adjust(1)
+        # builder.add(InlineKeyboardButton(
+        #     text="Выйти из очереди",
+        #     callback_data="waiting_to_queue")
+        # )
+        #builder.adjust(1)
+        
         await state.set_state(breakFastState.waiting_to_solution) #3 РЕШЕНИЕ ПО ПОВОДУ ОЧЕРЕДИ 
-        await callback.message.answer(f"⬇️ Очередь подошла, выбери действие ⬇️", reply_markup=builder.as_markup() )
+        await callback.message.answer(f"Очередь подошла. Чтобы выйти на перерыв, нажмите кнопку в течении ⚠️{time.solution_time.value} секунд⚠️. Если не нажать кнопку, вы будете исключены из очереди",
+                                      reply_markup=builder.as_markup() )
         await callback.answer() # Подтвердить получение от телеграмма
 
-       
+        # Время на принятие решения --------------------------------------------------------------------------------------------------
+        await asyncio.sleep(time.solution_time.value/2) # Если пользователь за определенное время не вернётся на перерыв, его выкидывает с перерыва
+        
+        if(dic_time_solution[callback.from_user.id] == True):
+            await callback.message.answer(f"⚠️ У вас осталось {int(time.solution_time.value/2)} секунд ⚠️")
+            await asyncio.sleep(time.solution_time.value/2) # Если пользователь за определенное время не вернётся на перерыв, его выкидывает с перерыва 
+        
+        if(dic_time_solution[callback.from_user.id] == True): # Время на принятие решения --------------------------------------------
+            
+            await state.set_state(breakFastState.waiting_to_queue)
+            await callback.message.answer("❌ Вы не успели принять решение и были исключены из очереди ❌")
+            await delet_in_query(callback.from_user.id) # Удаление челвоека из очереди
+            
+            builder_not_solution = InlineKeyboardBuilder()
+            builder_not_solution.add(InlineKeyboardButton(
+                text="Возврат в меню",
+                callback_data="waiting_to_queue")
+            )
+            await callback.message.answer(f"Вернитесь в меню, чтобы зайти в очередь",
+                                      reply_markup=builder_not_solution.as_markup() )
+            
     else:
         await callback.message.answer("Очередь занята, ожидайте своей очереди. Вам придёт уведомление")
         await callback.answer() # Подтвердить получение от телеграмма
-
+        
         await asyncio.create_task(check_query_1(callback.from_user.id)) # ждём выполнения check_query_1
         await callback.message.delete()
 
@@ -151,18 +190,44 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
             text="Уйти на перерыв",
             callback_data="breakfast"),
         )
-        builder.add(InlineKeyboardButton(
-            text="Выйти из очереди",
-            callback_data="waiting_to_queue")
-        )
-        builder.adjust(1)
+        # builder.add(InlineKeyboardButton(
+        #     text="Выйти из очереди",
+        #     callback_data="waiting_to_queue")
+        # )
+        #builder.adjust(1)
+        
         await state.set_state(breakFastState.waiting_to_solution) #3 РЕШЕНИЕ ПО ПОВОДУ ОЧЕРЕДИ 
-        await callback.message.answer(f"⬇️ Очередь подошла, выбери действие ⬇️", reply_markup=builder.as_markup() )
+        await callback.message.answer(f"Очередь подошла. Чтобы выйти на перерыв, нажмите кнопку в течении ⚠️{time.solution_time.value} секунд⚠️. Если не нажать кнопку, вы будете исключены из очереди",
+                                      reply_markup=builder.as_markup() )
         await callback.answer() # Подтвердить получение от телеграмма
+        
+        # Время на принятие решения --------------------------------------------------------------------------------------------------
+        await asyncio.sleep(time.solution_time.value/2) # Если пользователь за определенное время не вернётся на перерыв, его выкидывает с перерыва
+        await callback.message.answer(f"⚠️ У вас осталось {int(time.solution_time.value/2)} секунд  ⚠️")
+        await asyncio.sleep(time.solution_time.value/2) # Если пользователь за определенное время не вернётся на перерыв, его выкидывает с перерыва 
+        
+        
+        if(dic_time_solution[callback.from_user.id] == True): # Время на принятие решения --------------------------------------------
+            await state.set_state(breakFastState.waiting_to_queue)
+            await callback.message.answer("❌ Вы не успели принять решение и были исключены из очереди ❌")
+            await delet_in_query(callback.from_user.id) # Удаление челвоека из очереди
+            builder_not_solution = InlineKeyboardBuilder()
+            builder_not_solution.add(InlineKeyboardButton(
+                text="Возврат в меню",
+                callback_data="waiting_to_queue")
+            )
+            await callback.message.answer(f"Вернитесь в меню, чтобы зайти в очередь",
+                                      reply_markup=builder_not_solution.as_markup() )
       
 
 @disp.callback_query(breakFastState.waiting_to_solution, F.data == "breakfast") #4 Перерыв
 async def breakfast(callback: CallbackQuery, state: FSMContext):
+    global dic_time_solution # Время на принятие решения --------------------------------------------
+    dic_time_solution[callback.from_user.id] = False # Время на принятие решения --------------------------------------------
+    
+    global dic_break_more_XX_minet # Время на принятие решения --------------------------------------------
+    dic_break_more_XX_minet[callback.from_user.id] = True # ключ: значение | id пользователя: опоздал ли он на перерыв 
+    
     await callback.message.delete()
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
@@ -170,13 +235,25 @@ async def breakfast(callback: CallbackQuery, state: FSMContext):
         callback_data="waiting_to_queue")
     )
     await state.set_state(breakFastState.breakfast) #4 ПЕРЕРЫВ
-    
-    await callback.message.answer("Вы на перерыве, чтобы вернуться нажмите на кнопку ⬇️", 
-                                  reply_markup=builder.as_markup()
-                                  )
+    await callback.message.answer(f"Вы на перерыве, чтобы вернуться нажмите на кнопку. Если вы будете на перерыве больше {time.break_time.value} секунд, вас автоматически исключит из очереди ⬇️"
+                                  , reply_markup=builder.as_markup())
     await callback.answer() # Подтвердить получение от телеграмма
+  
     
-     
+    
+    await asyncio.sleep(time.break_time.value) # Если пользователь за определенное время не вернётся на перерыв, его выкидывает с перерыва 
+    if(dic_break_more_XX_minet[callback.from_user.id] == True): # Время на принятие решения --------------------------------------------
+        await state.set_state(breakFastState.waiting_to_queue)
+        await callback.message.answer("❌ Вы были удалены с перерыва за отуствие более 15 минут ")
+        await delet_in_query(callback.from_user.id) # Удаление челвоека из очереди
+    
+    
+    
+
+@disp.message() #Любая фраза вне контекста бота
+async def any_message(message: Message):
+    await message.delete()
+    
 #--------------------------------------------------------------------
 
 # Запуск процесса поллинга  новых апдейтов (поиск обновлений от новых задач) // Polling, или опрос, – это процесс, при котором клиентский скрипт периодически отправляет запросы к серверу для проверки наличия новой инфы. 
