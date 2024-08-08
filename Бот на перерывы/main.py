@@ -80,18 +80,19 @@ async def delet_in_query(user_id): # Удаление из очереди
         
 @disp.message(Command("reboot")) #Перезапуск бота
 async def cmd_reboot(message: Message, state: FSMContext):
+    await message.delete()
     await state.set_state(None) # ОТЧИЩАЕМ состояния
     await message.answer( "<b>Бот перезапущен</b>", parse_mode=ParseMode.HTML)
 
-
 @disp.message(StateFilter(None), Command("start")) #1 Первый запуск бота Запускает либо #2 либо #3
 async def cmd_start(message: Message, state: FSMContext):
+    await message.delete()
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
         text="Занять очередь",
         callback_data="waiting_to_free_queue")
     )
-    await delet_in_query(message.from_user.id) # Удаление челвоека из очереди
+    await delet_in_query(message.from_user.id) # Удаление челововека из очереди
     await state.set_state(breakFastState.waiting_to_queue) #1 ОЖИДАНИЕ ВХОЖДЕНИЯ В ОЧЕРЕДЬ
     await message.answer(
         "Этот бот поможет тебе занять очередь на перерыв. Нажми на кнопку, чтобы занять очередь ",
@@ -102,6 +103,7 @@ async def cmd_start(message: Message, state: FSMContext):
     
 @disp.callback_query(F.data == "waiting_to_queue") #1 Эмитация первого запуска Запускает либо #2 либо #3
 async def new_start(callback: CallbackQuery, state: FSMContext):
+    await callback.message.delete()
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
         text="Занять очередь",
@@ -118,6 +120,7 @@ async def new_start(callback: CallbackQuery, state: FSMContext):
 
 @disp.callback_query(breakFastState.waiting_to_queue, F.data == "waiting_to_free_queue") #2 Обработчки ЗАНЯЛ ОЧЕРЕДЬ После шага с ожиданием очереди
 async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
+    await callback.message.delete()
     await set_query(callback.from_user.id) # человек с id занимает очередь 
     await state.set_state(breakFastState.waiting_to_free_queue) #2 ЗАНЯЛ ОЧЕРЕДЬ И ЖДЁТ ОСВОБОЖДЕНИЯ ОЧЕРЕДИ
     if(check_query(callback.from_user.id)): # Если очередь подошла
@@ -141,7 +144,7 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
         await callback.answer() # Подтвердить получение от телеграмма
 
         await asyncio.create_task(check_query_1(callback.from_user.id)) # ждём выполнения check_query_1
-        
+        await callback.message.delete()
 
         builder = InlineKeyboardBuilder()
         builder.add(InlineKeyboardButton(
@@ -160,6 +163,7 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
 
 @disp.callback_query(breakFastState.waiting_to_solution, F.data == "breakfast") #4 Перерыв
 async def breakfast(callback: CallbackQuery, state: FSMContext):
+    await callback.message.delete()
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
         text="Вернуться с перерыва",
@@ -167,7 +171,7 @@ async def breakfast(callback: CallbackQuery, state: FSMContext):
     )
     await state.set_state(breakFastState.breakfast) #4 ПЕРЕРЫВ
     
-    await callback.message.answer("⬇️ Вы на перерыве, чтобы вернуться нажмите на кнопку ⬇️", 
+    await callback.message.answer("Вы на перерыве, чтобы вернуться нажмите на кнопку ⬇️", 
                                   reply_markup=builder.as_markup()
                                   )
     await callback.answer() # Подтвердить получение от телеграмма
