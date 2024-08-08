@@ -11,6 +11,7 @@
     <OutputPath>.</OutputPath>
     <Name>Бот на перерывы</Name>
     <RootNamespace>Бот на перерывы</RootNamespace>
+    <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -22,11 +23,15 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="config_reader.py" />
+    <Compile Include="filterts.py" />
     <Compile Include="handlers_start.py" />
     <Compile Include="main.py" />
   </ItemGroup>
   <ItemGroup>
     <Content Include=".env" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="handlers\" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
