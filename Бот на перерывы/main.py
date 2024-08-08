@@ -34,11 +34,12 @@ class breakFastState(StatesGroup): # Класс состояний
 
 async def set_query(user_id): # функция занятия очереди 
     global current_cout_query
+    current_cout_query.sort(key=lambda arr: len(arr)) # Самая первая очередь, самая короткая 
     current_cout_query[0].append(user_id)
     current_cout_query.sort(key=lambda arr: len(arr)) # Самая первая очередь, самая короткая 
    
 
-def check_query(user_id) -> bool: # проверка доступности очереди 
+def check_query(user_id) -> bool: # проверка доступности очереди в самом начале 
     global current_cout_query
     for i in range(config_reader.queue_drivers):
         if current_cout_query[i]:
@@ -46,7 +47,8 @@ def check_query(user_id) -> bool: # проверка доступности оч
                 return True
     return False
 
-async def check_query_1(user_id) -> bool: # проверка доступности очереди 
+
+async def check_query_1(user_id) -> bool: # проверка доступности очереди асинхронная Если изначально очередь занята
     global current_cout_query
     while True: 
         await asyncio.sleep(0)
@@ -54,22 +56,26 @@ async def check_query_1(user_id) -> bool: # проверка доступнос�
             if current_cout_query[i]:
                 if (user_id == current_cout_query[i][0]):        
                     return True
-    
-        
+            
 
 async def delet_in_query(user_id): # Удаление из очереди
     global current_cout_query
-    for x in current_cout_query:
-        print(f"Выведем значения очереди: {x}")
+    # for x in current_cout_query:
+    #     print(f"Выведем значения очереди: {x}")
         
-    for i in range(config_reader.queue_drivers):
+    for i in range(config_reader.queue_drivers): # Пройдемся по всем очередям 
         if current_cout_query[i]: # Если список не пуст
             if user_id in current_cout_query[i]:
                 current_cout_query[i].remove(user_id)
-    current_cout_query.sort(key=lambda arr: len(arr)) # Самая первая очередь, самая короткая 
-            
-    for x in current_cout_query:
-        print(f"Очередь после удаления: {x}")
+                if(len(current_cout_query)>0):     
+                    current_cout_query.sort(key=lambda arr: len(arr)) # Самая первая очередь, самая короткая 
+                    if(len(current_cout_query[len(current_cout_query)-1]) > 1):
+                        current_cout_query[0].append(current_cout_query[len(current_cout_query)-1].pop()) # Берём самую длинную очередь и переносим из неё id в самую короткую                 
+                break
+
+    current_cout_query.sort(key=lambda arr: len(arr)) # Самая первая очередь, самая короткая        
+    # for x in current_cout_query:
+    #     print(f"Очередь после удаления: {x}")
     
         
 @disp.message(Command("reboot")) #Перезапуск бота
@@ -134,7 +140,7 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("Очередь занята, ожидайте своей очереди. Вам придёт уведомление")
         await callback.answer() # Подтвердить получение от телеграмма
 
-        await asyncio.create_task(check_query_1(callback.from_user.id))
+        await asyncio.create_task(check_query_1(callback.from_user.id)) # ждём выполнения check_query_1
         
 
         builder = InlineKeyboardBuilder()
