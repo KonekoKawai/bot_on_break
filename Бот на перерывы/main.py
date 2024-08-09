@@ -66,13 +66,19 @@ async def delet_in_query(user_id): # Удаление из очереди
 
 @disp.message(Command("reboot")) #Перезапуск бота
 async def cmd_reboot(message: Message, state: FSMContext):
-    await message.delete()
+    try:
+        await message.delete()
+    except:
+        pass
     await state.set_state(None) # ОТЧИЩАЕМ состояния
     await message.answer( "<b>Бот перезапущен</b>", parse_mode=ParseMode.HTML)
 
 @disp.message(Command("start")) #1 Первый запуск бота Запускает либо #2 либо #3
 async def cmd_start(message: Message, state: FSMContext):
-    await message.delete()
+    try:
+        await message.delete()
+    except:
+        pass
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
         text="Занять очередь",
@@ -90,9 +96,11 @@ async def cmd_start(message: Message, state: FSMContext):
 async def new_start(callback: CallbackQuery, state: FSMContext):
     global dic_break_more_XX_minuts # Время на принятие решения --------------------------------------------
     dic_break_more_XX_minuts[callback.from_user.id] = False # Время на принятие решения --------------------------------------------
-
     
-    await callback.message.delete() # Удаления предыдущих инлайнов
+    try:
+        await callback.message.delete()
+    except:
+        pass
     
     builder = InlineKeyboardBuilder()
     builder.add(InlineKeyboardButton(
@@ -116,7 +124,10 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
     delete_this_message = [] # Список для удаления сообщения
     delete_this_message.clear()
     
-    await callback.message.delete() # Удаления предыдущих инлайнов
+    try:
+        await callback.message.delete()
+    except:
+        pass
     
     await set_query(callback.from_user.id) # человек с id занимает очередь 
     await state.set_state(breakFastState.waiting_to_free_queue) #2 ЗАНЯЛ ОЧЕРЕДЬ И ЖДЁТ ОСВОБОЖДЕНИЯ ОЧЕРЕДИ
@@ -141,12 +152,19 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
                                        )
             await asyncio.sleep(time.solution_time.value/2) # Если пользователь за определенное время не вернётся на перерыв, его выкидывает с перерыва 
             
-            await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последнее сообщение в списке
+            try:
+                if delete_this_message: # Если не пуст
+                    await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последнее сообщение в списке    
+            except:
+                pass
             delete_this_message.pop() # и выкидываем его из списка
-         
             
             if(dic_time_solution[callback.from_user.id] == True): # Время на принятие решения ИСТЕКЛО --------------------------------------------
-                await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последний элемент 
+                try:
+                    if delete_this_message: # Если не пуст
+                        await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последнее сообщение в списке     
+                except:
+                    pass
                 delete_this_message.pop() # и выкидываем его из списка
                 
                 await state.set_state(breakFastState.waiting_to_queue)
@@ -166,7 +184,10 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
         await callback.answer() # Подтвердить получение от телеграмма
         
         await asyncio.create_task(check_query_1(callback.from_user.id)) # ждём выполнения check_query_1
-        await callback.message.delete()
+        try:
+            await callback.message.delete()
+        except:
+            pass
 
         builder = InlineKeyboardBuilder()
         builder.add(InlineKeyboardButton(
@@ -188,11 +209,21 @@ async def waiting_to_free_queue(callback: CallbackQuery, state: FSMContext):
                         )
             await asyncio.sleep(time.solution_time.value/2) # Если пользователь за определенное время не вернётся на перерыв, его выкидывает с перерыва  
             
-            await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последнее сообщение в списке
+            try:
+                if delete_this_message: # Если не пуст
+                    await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последнее сообщение в списке             
+            except:
+                pass
             delete_this_message.pop() # и выкидываем его из списка
             
             if(dic_time_solution[callback.from_user.id] == True): # Время на принятие решения --------------------------------------------
-                await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последнее сообщение в списке
+                
+                try:
+                    if delete_this_message: # Если не пуст
+                        await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последнее сообщение в списке
+                        
+                except:
+                    pass
                 delete_this_message.pop() # и выкидываем его из списка
                 
                 await state.set_state(breakFastState.waiting_to_queue)
@@ -219,7 +250,10 @@ async def breakfast(callback: CallbackQuery, state: FSMContext):
     delete_this_message = [] # Список для удаления сообщения
     delete_this_message.clear()
     
-    await callback.message.delete()
+    try:
+        await callback.message.delete()
+    except:
+        pass
     
     
     builder = InlineKeyboardBuilder()
@@ -228,8 +262,8 @@ async def breakfast(callback: CallbackQuery, state: FSMContext):
         callback_data="waiting_to_queue")
     )
     await state.set_state(breakFastState.breakfast) #4 ПЕРЕРЫВ
-    delete_this_message.append(await callback.message.answer(f"Вы на перерыве, чтобы вернуться нажмите на кнопку.\n Если вы будете на перерыве больше {time.break_time_minuts.value} минут, вас автоматически исключит из очереди ⬇️"
-                                  , reply_markup=builder.as_markup()))
+    await callback.message.answer(f"Вы на перерыве, чтобы вернуться нажмите на кнопку.\n Если вы будете на перерыве больше {time.break_time_minuts.value} минут, вас автоматически исключит из очереди ⬇️"
+                                  , reply_markup=builder.as_markup())
     await callback.answer() # Подтвердить получение от телеграмма
   
     # Время на принятие решения --------------------------------------------------------------------------------------------------
@@ -240,8 +274,13 @@ async def breakfast(callback: CallbackQuery, state: FSMContext):
                                    )
         await asyncio.sleep(time.break_time.value/3) # Если пользователь за определенное время не вернётся на перерыв, его выкидывает с перерыва 
         
-        await delete_this_message[len(delete_this_message)-1].delete() # Удаляем послений элемент 
-        delete_this_message.pop() # и удаляем его из списка
+        try:
+            if delete_this_message: # Если не пуст
+                await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последнее сообщение в списке
+                        
+        except:
+            pass
+        delete_this_message.pop() # и выкидываем его из списка
         
         if(dic_break_more_XX_minuts[callback.from_user.id] == True):
             
@@ -250,13 +289,23 @@ async def breakfast(callback: CallbackQuery, state: FSMContext):
                                        )
             await asyncio.sleep(time.break_time.value/3) # Если пользователь за определенное время не вернётся на перерыв, его выкидывает с перерыва 
             
-            await delete_this_message[len(delete_this_message)-1].delete() # Удаляем послений элемент 
-            delete_this_message.pop() # и удаляем его из списка
+            try:
+                if delete_this_message: # Если не пуст
+                    await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последнее сообщение в списке
+                        
+            except:
+                pass
+            delete_this_message.pop() # и выкидываем его из списка
             
             if(dic_break_more_XX_minuts[callback.from_user.id] == True): # Время на принятие решения --------------------------------------------
                 
-                await delete_this_message[len(delete_this_message)-1].delete() # Удаляем послений элемент 
-                delete_this_message.pop() # и удаляем его из списка
+                try:
+                    if delete_this_message: # Если не пуст
+                        await delete_this_message[len(delete_this_message)-1].delete() # Удаляем последнее сообщение в списке
+                        
+                except:
+                    pass
+                delete_this_message.pop() # и выкидываем его из списка
                 
                 await state.set_state(breakFastState.waiting_to_queue)
                 await callback.message.answer("❌ Вы были удалены с перерыва за отуствие более 15 минут ")
@@ -267,13 +316,11 @@ async def breakfast(callback: CallbackQuery, state: FSMContext):
                             text="Возврат в меню",
                             callback_data="waiting_to_queue")
                             )
-                delete_this_message.append(await callback.message.answer(f"Вернитесь в меню, чтобы повторно зайти в очередь",
+                await callback.message.answer(f"Вернитесь в меню, чтобы повторно зайти в очередь",
                                               reply_markup=builder_not_solution.as_markup() )
-                )
-                await asyncio.sleep(time.break_time)
-                if delete_this_message: # Если не пуст
-                    await delete_this_message[len(delete_this_message)-1].delete() # Удаляем послений элемент 
-                    delete_this_message.pop() # и удаляем его из списка
+                
+                
+                
                 
                 
     
