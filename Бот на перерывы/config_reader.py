@@ -25,9 +25,9 @@ from aiogram.enums import ParseMode
 logging.basicConfig(level=logging.INFO) 
    
 # logger = logging.getLogger(__name__); # Имя файла в логгере
-# logger.setLevel(logging.INFO); # LVL для обработки в логгере (Уровень логирования)
+# logger.setLevel(logging.DEBUG); # LVL для обработки в логгере (Уровень логирования)
 
-# loggerHandler = logging.FileHandler(f'{__name__}.log'); # настройка обработчика для logger
+# loggerHandler = logging.FileHandler(f'{__name__}.log', filemode="w"); # настройка обработчика для logger
 # loggerFormat = logging.Formatter("%(filename)s | %(asctime)s | %(levelname)s | %(message)s"); # настройка форматировщика
 
 # loggerHandler.setFormatter(loggerFormat); # добавление форматировщика к обработчику
